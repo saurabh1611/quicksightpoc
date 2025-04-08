@@ -35,4 +35,11 @@ jobs:
           role-session-name: GitHubDeploymentSession
       
       - name: Build in dev environment
-        run: python folderexport.py --account-id 470822489487 --region us-east-1 --folder-id f286a908-ed92-4b89-ad22-af4c2a0b54b3 --output ./tmp/QuickSightBundle.zip
+        run: python folderexport.py --account-id 470822489487 --region us-east-1 --folder-id f286a908-ed92-4b89-ad22-af4c2a0b54b3 --output /tmp/QuickSightBundle.zip
+      
+      - name: Upload QuickSight bundle artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: quicksight-bundle
+          path: /tmp/QuickSightBundle.zip
+          retention-days: 5
