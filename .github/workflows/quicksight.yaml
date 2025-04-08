@@ -1,0 +1,21 @@
+name: Multi-Account Deployment
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials for dev
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::470822489487:role/quicksightpoc-trustrole
+          aws-region: us-east-1
+          role-session-name: GitHubDeploymentSession
+      
+      - name: Build in dev environment
+        run: aws s3 ls
