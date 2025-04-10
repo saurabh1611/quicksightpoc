@@ -9,6 +9,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
+      id-token: write  # This is needed for OIDC auth with AWS
       contents: read
     
     steps:
@@ -48,7 +49,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: read  # No OIDC permissions needed for this job
     
     steps:
       - uses: actions/checkout@v3
@@ -72,7 +73,7 @@ jobs:
           name: quicksight-bundle
           path: ./tmp
 
-      # Using AWS access keys from secrets
+      # Using AWS access keys from secrets for QA
       - name: Configure AWS credentials for QA using access keys
         uses: aws-actions/configure-aws-credentials@v4
         with:
