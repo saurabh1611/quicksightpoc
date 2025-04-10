@@ -77,8 +77,8 @@ jobs:
       - name: Configure AWS credentials for QA using access keys
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ var.QA_AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ var.QA_AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{ secrets.QA_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.QA_AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
       
       - name: Debug AWS identity
