@@ -9,7 +9,6 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
     
     steps:
@@ -49,12 +48,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
       contents: read
-    
-    env:
-      QA_AWS_ROLE_ARN: arn:aws:iam::269801428807:role/quicksightpoc-trustrole
-      AWS_REGION: us-east-1
     
     steps:
       - uses: actions/checkout@v3
@@ -78,21 +72,16 @@ jobs:
           name: quicksight-bundle
           path: ./tmp
 
-      # Try a different approach using GitHub's built-in OIDC provider
-      - name: Configure AWS credentials for QA
-        id: creds
+      # Using AWS access keys from secrets
+      - name: Configure AWS credentials for QA using access keys
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ env.QA_AWS_ROLE_ARN }}
-          aws-region: ${{ env.AWS_REGION }}
-          role-session-name: GitHubImportSession
-          mask-aws-account-id: 'no'
+          aws-access-key-id: ${{ secrets.QA_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.QA_AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
       
       - name: Debug AWS identity
-        run: |
-          aws sts get-caller-identity
-          echo "Using role: ${{ env.QA_AWS_ROLE_ARN }}"
-          echo "In region: ${{ env.AWS_REGION }}"
+        run: aws sts get-caller-identity
       
       - name: Import in QA environment
         run: python awscodeimport.py --file ./tmp/QuickSightBundle.zip --account-id 269801428807 --region us-east-1
