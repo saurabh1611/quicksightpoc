@@ -5,14 +5,12 @@ on:
       - main
   workflow_dispatch:
 
-# Add global permissions that apply to all jobs
-permissions:
-  id-token: write
-  contents: read
-
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     
     steps:
       - uses: actions/checkout@v3
@@ -36,7 +34,6 @@ jobs:
           role-to-assume: arn:aws:iam::470822489487:role/quicksightpoc-trustrole
           aws-region: us-east-1
           role-session-name: GitHubDeploymentSession
-          audience: sts.amazonaws.com
       
       - name: Build in dev environment
         run: python folderexport.py --account-id 470822489487 --region us-east-1 --folder-id f286a908-ed92-4b89-ad22-af4c2a0b54b3 --output ./tmp/QuickSightBundle.zip
@@ -51,6 +48,13 @@ jobs:
   import-qa:
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    env:
+      QA_AWS_ROLE_ARN: arn:aws:iam::269801428807:role/quicksightpoc-trustrole
+      AWS_REGION: us-east-1
     
     steps:
       - uses: actions/checkout@v3
@@ -63,7 +67,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install boto3 urllib3
+          pip install boto3 urllib3 awscli
       
       - name: Create tmp directory
         run: mkdir -p ./tmp
@@ -74,13 +78,21 @@ jobs:
           name: quicksight-bundle
           path: ./tmp
 
+      # Try a different approach using GitHub's built-in OIDC provider
       - name: Configure AWS credentials for QA
+        id: creds
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::269801428807:role/quicksightpoc-trustrole
-          aws-region: us-east-1
-          role-session-name: GitHubDeploymentSession
-          audience: sts.amazonaws.com
+          role-to-assume: ${{ env.QA_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubImportSession
+          mask-aws-account-id: 'no'
+      
+      - name: Debug AWS identity
+        run: |
+          aws sts get-caller-identity
+          echo "Using role: ${{ env.QA_AWS_ROLE_ARN }}"
+          echo "In region: ${{ env.AWS_REGION }}"
       
       - name: Import in QA environment
         run: python awscodeimport.py --file ./tmp/QuickSightBundle.zip --account-id 269801428807 --region us-east-1
