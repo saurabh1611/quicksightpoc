@@ -39,28 +39,66 @@ jobs:
       
       - name: Process QuickSight Bundle
         run: |
-          # Create a temporary directory for processing
+          # Create temporary directories for processing
           mkdir -p ./tmp/process_dir
+          mkdir -p ./tmp/nested_process
           
-          # Extract the zip file
+          # Extract the main zip file
           unzip -q ./tmp/QuickSightBundle.zip -d ./tmp/process_dir
           
-          # Find and replace IDs in all JSON files
-          find ./tmp/process_dir -name "*.json" -type f -exec sed -i \
-            -e 's/347f0c50-33a1-4fd2-bdd5-6f8867a05601/1e39287a-aafe-48a8-a81d-7d8e25a93c4f/g' \
-            -e 's/3519323f-3db4-4585-a0c1-a1df2698e3e0/221553ff-d80a-4861-8890-ae7e028016b7/g' \
-            -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/52825973-e237-4adb-8fe8-015c046066b4/g' \
-            -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/8955b0d0-ee47-4915-aac4-c4f9dffa6821/g' \
-            -e 's/7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87/52825973-e237-4adb-8fe8-015c046066b4/g' \
-            {} \;
+          # Function to recursively process all zip files and JSON files
+          process_directory() {
+            local dir=$1
             
-          # Re-create zip file with updated content
+            # Process all JSON files in this directory
+            find "$dir" -name "*.json" -type f -exec sed -i \
+              -e 's/347f0c50-33a1-4fd2-bdd5-6f8867a05601/1e39287a-aafe-48a8-a81d-7d8e25a93c4f/g' \
+              -e 's/3519323f-3db4-4585-a0c1-a1df2698e3e0/221553ff-d80a-4861-8890-ae7e028016b7/g' \
+              -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/52825973-e237-4adb-8fe8-015c046066b4/g' \
+              -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/8955b0d0-ee47-4915-aac4-c4f9dffa6821/g' \
+              -e 's/7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87/52825973-e237-4adb-8fe8-015c046066b4/g' \
+              {} \;
+            
+            # Find and process all nested zip files
+            find "$dir" -name "*.zip" -type f | while read zip_file; do
+              echo "Processing nested zip file: $zip_file"
+              
+              # Create a unique directory for this nested zip
+              nested_dir="./tmp/nested_process/$(basename "$zip_file" .zip)"
+              mkdir -p "$nested_dir"
+              
+              # Extract the nested zip
+              unzip -q "$zip_file" -d "$nested_dir"
+              
+              # Process the extracted contents recursively
+              process_directory "$nested_dir"
+              
+              # Re-zip the processed contents
+              original_dir=$(pwd)
+              cd "$nested_dir"
+              rm -f "$zip_file"  # Remove the original zip file
+              zip -q -r "$zip_file" *  # Create new zip with processed contents
+              cd "$original_dir"
+              
+              # Replace the original zip file with the processed one
+              mv "$nested_dir/$zip_file" "$zip_file"
+              
+              # Clean up the temporary nested directory
+              rm -rf "$nested_dir"
+            done
+          }
+          
+          # Start processing from the root extraction directory
+          process_directory "./tmp/process_dir"
+          
+          # Re-create the main zip file with all processed content
           cd ./tmp/process_dir
-          zip -q -r ../QuickSightBundle.zip *
+          rm -f ../QuickSightBundle.zip  # Remove the original zip file
+          zip -q -r ../QuickSightBundle.zip *  # Create new zip with all processed contents
           cd ../../
           
-          # Cleanup temporary directory
-          rm -rf ./tmp/process_dir
+          # Cleanup temporary directories
+          rm -rf ./tmp/process_dir ./tmp/nested_process
       
       - name: Upload QuickSight bundle artifact
         uses: actions/upload-artifact@v4
