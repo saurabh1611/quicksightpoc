@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install boto3 urllib3
+          pip install boto3 urllib3 jq
       
       - name: Create tmp directory
         run: mkdir -p ./tmp
@@ -46,12 +46,98 @@ jobs:
           # Extract the main zip file
           unzip -q ./tmp/QuickSightBundle.zip -d ./tmp/process_dir
           
+          echo "Analyzing QuickSight bundle structure..."
+          find ./tmp/process_dir -type f -name "*.json" | sort
+          
+          # Create a script to fix the non-relational data source issue
+          cat > ./tmp/fix_datasource.py << 'EOF'
+          #!/usr/bin/env python3
+          import json
+          import os
+          import sys
+          import re
+
+          def fix_dataset_json(file_path):
+              print(f"Processing dataset file: {file_path}")
+              
+              with open(file_path, 'r') as f:
+                  try:
+                      data = json.load(f)
+                  except json.JSONDecodeError as e:
+                      print(f"Error decoding JSON: {e}")
+                      return False
+              
+              modified = False
+              
+              # Check if this is a dataset definition with customSql
+              if 'DataSetConfiguration' in data:
+                  config = data['DataSetConfiguration']
+                  
+                  # Check if using a non-relational data source with CustomSQL
+                  if 'PhysicalTableMap' in config:
+                      for table_id, table_def in config['PhysicalTableMap'].items():
+                          if 'CustomSql' in table_def:
+                              custom_sql = table_def['CustomSql']
+                              if 'DataSourceArn' in custom_sql:
+                                  # This checks for the problematic data source ID
+                                  if '1e39287a-aafe-48a8-a8d1-7d8e25a93c4f' in custom_sql['DataSourceArn']:
+                                      print(f"Found non-relational data source in CustomSQL")
+                                      
+                                      # Replace with a known relational data source ID
+                                      # For this fix, we'll use a different data source ID 
+                                      # that should be compatible with SQL
+                                      new_ds_id = '221553ff-d80a-4861-8890-ae7e028016b7'
+                                      custom_sql['DataSourceArn'] = custom_sql['DataSourceArn'].replace(
+                                          '1e39287a-aafe-48a8-a8d1-7d8e25a93c4f', 
+                                          new_ds_id
+                                      )
+                                      modified = True
+                                      print(f"Replaced data source ID in CustomSQL")
+              
+              if modified:
+                  # Write the modified data back to the file
+                  with open(file_path, 'w') as f:
+                      json.dump(data, f, indent=2)
+                  print(f"Updated {file_path}")
+                  return True
+              
+              return False
+
+          def process_directory(directory):
+              print(f"Processing directory: {directory}")
+              modified_files = 0
+              
+              # Find all JSON files
+              for root, dirs, files in os.walk(directory):
+                  for file in files:
+                      if file.endswith('.json'):
+                          file_path = os.path.join(root, file)
+                          if fix_dataset_json(file_path):
+                              modified_files += 1
+              
+              return modified_files
+
+          if __name__ == "__main__":
+              if len(sys.argv) != 2:
+                  print("Usage: fix_datasource.py <directory>")
+                  sys.exit(1)
+                  
+              directory = sys.argv[1]
+              modified = process_directory(directory)
+              print(f"Fixed {modified} files")
+          EOF
+          
+          # Make the script executable
+          chmod +x ./tmp/fix_datasource.py
+          
+          # Execute the fix script
+          python ./tmp/fix_datasource.py ./tmp/process_dir
+          
           # Function to recursively process all zip files and JSON files
           process_directory() {
             local dir=$1
             
             # Process all text files (including JSON) in this directory
-            # The -type f finds all regular files regardless of extension
             find "$dir" -type f | while read file; do
               # Check if it's a text file using the file command
               if file "$file" | grep -q "text"; then
