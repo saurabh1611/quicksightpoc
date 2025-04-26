@@ -58,8 +58,7 @@ jobs:
                 sed -i \
                   -e 's/347f0c50-33a1-4fd2-bdd5-6f8867a05601/1e39287a-aafe-48a8-a81d-7d8e25a93c4f/g' \
                   -e 's/3519323f-3db4-4585-a0c1-a1df2698e3e0/221553ff-d80a-4861-8890-ae7e028016b7/g' \
-                  -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/52825973-e237-4adb-8fe8-015c046066b4/g' \
-                  -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/8955b0d0-ee47-4915-aac4-c4f9dffa6821/g' \
+                  -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/78955b0d0-ee47-4915-aac4-c4f9dffa6821/g' \
                   -e 's/7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87/52825973-e237-4adb-8fe8-015c046066b4/g' \
                   -e 's/-dev-/-tst-/g' \
                   "$file"
