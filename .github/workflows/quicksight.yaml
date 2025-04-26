@@ -4,7 +4,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -38,13 +37,37 @@ jobs:
       - name: Build in dev environment
         run: python folderexport.py --account-id 470822489487 --region us-east-1 --folder-id f286a908-ed92-4b89-ad22-af4c2a0b54b3 --output ./tmp/QuickSightBundle.zip
       
+      - name: Process QuickSight Bundle
+        run: |
+          # Create a temporary directory for processing
+          mkdir -p ./tmp/process_dir
+          
+          # Extract the zip file
+          unzip -q ./tmp/QuickSightBundle.zip -d ./tmp/process_dir
+          
+          # Find and replace IDs in all JSON files
+          find ./tmp/process_dir -name "*.json" -type f -exec sed -i \
+            -e 's/347f0c50-33a1-4fd2-bdd5-6f8867a05601/1e39287a-aafe-48a8-a81d-7d8e25a93c4f/g' \
+            -e 's/3519323f-3db4-4585-a0c1-a1df2698e3e0/221553ff-d80a-4861-8890-ae7e028016b7/g' \
+            -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/52825973-e237-4adb-8fe8-015c046066b4/g' \
+            -e 's/bb9c4023-1f25-472b-bf31-7a8ded7c2c69/8955b0d0-ee47-4915-aac4-c4f9dffa6821/g' \
+            -e 's/7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87/52825973-e237-4adb-8fe8-015c046066b4/g' \
+            {} \;
+            
+          # Re-create zip file with updated content
+          cd ./tmp/process_dir
+          zip -q -r ../QuickSightBundle.zip *
+          cd ../../
+          
+          # Cleanup temporary directory
+          rm -rf ./tmp/process_dir
+      
       - name: Upload QuickSight bundle artifact
         uses: actions/upload-artifact@v4
         with:
           name: quicksight-bundle
           path: ./tmp/QuickSightBundle.zip
           retention-days: 5
-
   import-qa:
     needs: build
     runs-on: ubuntu-latest
@@ -72,7 +95,6 @@ jobs:
         with:
           name: quicksight-bundle
           path: ./tmp
-
       # Using AWS access keys from secrets for QA
       - name: Configure AWS credentials for QA using access keys
         uses: aws-actions/configure-aws-credentials@v4
