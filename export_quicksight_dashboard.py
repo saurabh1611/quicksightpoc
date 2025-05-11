@@ -9,12 +9,34 @@ import json
 import tempfile
 import shutil
 
-# Configuration for the dataset ID replacement
-NEW_DATASET_ID_TO_SET = "XXXXXXXXXXXXX" # This is the ID set during the modification step
+# --- Configuration for Content Modifications ---
+# Value to set for the "dataSetId" JSON key in dataset definition files
+TARGET_JSON_KEY_DATASET_ID_VALUE = "XXXXXXXXXXXXX"
 
-def process_qs_file(downloaded_qs_path: str, output_modified_qs_path: str, new_id_to_set: str):
+# Values for global string replacement of Account ID within JSON files
+OLD_ACCOUNT_ID_TO_REPLACE = "470822489487"
+NEW_ACCOUNT_ID_FOR_REPLACEMENT = "470822489488"
+
+# Values for global string replacement of DataSource ID within JSON files
+OLD_DATASOURCE_ID_TO_REPLACE = "87e2b03f-58a7-4df5-af8f-43d0ae4788cd"
+NEW_DATASOURCE_ID_FOR_REPLACEMENT = "87e2b03f-58a7-4df5-af8f-43d0ae4788ef"
+# --- End of Configuration ---
+
+def process_qs_file(
+    downloaded_qs_path: str,
+    output_modified_qs_path: str,
+    target_dataset_id_json_key_value: str, # Value for "dataSetId" key
+    p_old_account_id: str,
+    p_new_account_id: str,
+    p_old_datasource_id: str,
+    p_new_datasource_id: str
+):
     """
-    Unzips a .qs file, modifies dataset IDs in JSON files, and zips it back.
+    Unzips a .qs file, modifies specified content in JSON files, and zips it back.
+    Modifications include:
+    1. Global string replacement of Account ID.
+    2. Global string replacement of DataSource ID.
+    3. Targeted update of the top-level "dataSetId" key in JSON objects.
     """
     print(f"\nProcessing downloaded QS file: {downloaded_qs_path}")
     temp_extract_dir = tempfile.mkdtemp()
@@ -34,47 +56,104 @@ def process_qs_file(downloaded_qs_path: str, output_modified_qs_path: str, new_i
                 data_folder_path = current_path
                 print(f"Found data definition folder: '{folder_name}' at '{data_folder_path}'")
                 break
-        
-        modified_files_count = 0
+
+        files_scanned_in_data_folder = 0
+        dataset_id_json_key_updated_count = 0
+        account_id_replaced_in_files_count = 0
+        datasource_id_replaced_in_files_count = 0
+
         if data_folder_path:
-            print(f"Scanning for JSON files in '{data_folder_path}' to update dataSetId to '{new_id_to_set}'...")
+            print(f"Scanning for JSON files in '{data_folder_path}' to perform modifications...")
             for filename in os.listdir(data_folder_path):
                 if filename.endswith(".json"):
+                    files_scanned_in_data_folder += 1
                     file_path = os.path.join(data_folder_path, filename)
-                    try:
-                        with open(file_path, 'r+', encoding='utf-8') as f:
-                            content = json.load(f)
-                            if isinstance(content, dict) and "dataSetId" in content:
-                                original_id = content["dataSetId"]
-                                print(f"  Processing file: {filename}, Original dataSetId: {original_id}")
-                                content["dataSetId"] = new_id_to_set
-                                f.seek(0)
-                                json.dump(content, f, indent=2)
-                                f.truncate()
-                                print(f"    Updated dataSetId in {filename} to {new_id_to_set}")
-                                modified_files_count += 1
-                            else:
-                                print(f"  Skipping file: {filename} (not a dictionary or 'dataSetId' key not found).")
-                    except json.JSONDecodeError:
-                        print(f"  Error decoding JSON from {filename}. Skipping.")
-                    except Exception as e:
-                        print(f"  Error processing file {filename}: {e}")
-            if modified_files_count > 0:
-                print(f"Successfully modified {modified_files_count} dataset JSON file(s).")
-            else:
-                print(f"No dataset JSON files were modified in '{data_folder_path}'.")
-        else:
-            print(f"Warning: Neither 'dataset' nor 'datasource' directory found in the bundle. Cannot update dataset IDs.")
-            print("Proceeding to re-zip the bundle without dataset ID modifications.")
+                    print(f"  Processing file: {filename}")
 
-        base_output_name = output_modified_qs_path.rsplit('.', 1)[0] 
+                    file_had_account_id_replaced = False
+                    file_had_datasource_id_replaced = False
+                    file_had_dataset_id_key_updated = False
+
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            raw_content_string = f.read()
+
+                        modified_content_string = raw_content_string
+
+                        # Perform global string replacement for Account ID
+                        if p_old_account_id in modified_content_string:
+                            temp_str = modified_content_string.replace(p_old_account_id, p_new_account_id)
+                            if temp_str != modified_content_string:
+                                modified_content_string = temp_str
+                                print(f"    Replaced Account ID string '{p_old_account_id}' with '{p_new_account_id}'.")
+                                file_had_account_id_replaced = True
+
+                        # Perform global string replacement for DataSource ID
+                        if p_old_datasource_id in modified_content_string:
+                            temp_str = modified_content_string.replace(p_old_datasource_id, p_new_datasource_id)
+                            if temp_str != modified_content_string:
+                                modified_content_string = temp_str
+                                print(f"    Replaced DataSource ID string '{p_old_datasource_id}' with '{p_new_datasource_id}'.")
+                                file_had_datasource_id_replaced = True
+
+                        content_dict = json.loads(modified_content_string)
+
+                        if isinstance(content_dict, dict) and "dataSetId" in content_dict:
+                            original_json_dataset_id = content_dict["dataSetId"]
+                            if original_json_dataset_id != target_dataset_id_json_key_value:
+                                print(f"    Original 'dataSetId' key: {original_json_dataset_id}, changing to {target_dataset_id_json_key_value}.")
+                                content_dict["dataSetId"] = target_dataset_id_json_key_value
+                                file_had_dataset_id_key_updated = True
+                            else:
+                                print(f"    'dataSetId' key is already {target_dataset_id_json_key_value}. No change to key value.")
+
+                        final_json_string_to_write = json.dumps(content_dict, indent=2)
+
+                        with open(file_path, 'w', encoding='utf-8') as f:
+                            f.write(final_json_string_to_write)
+
+                        if file_had_account_id_replaced:
+                            account_id_replaced_in_files_count += 1
+                        if file_had_datasource_id_replaced:
+                            datasource_id_replaced_in_files_count += 1
+                        if file_had_dataset_id_key_updated:
+                            dataset_id_json_key_updated_count += 1
+
+                    except json.JSONDecodeError as jde:
+                        print(f"  ERROR: Failed to decode JSON for {filename} after string replacements. File may be malformed. Error: {jde}")
+                        print(f"         Problematic content snippet (first 500 chars): \n{modified_content_string[:500]}...")
+                        print(f"  IMPORTANT: {filename} was NOT updated due to this JSON parsing error.")
+                    except Exception as e:
+                        print(f"  ERROR: An unexpected error occurred while processing file {filename}: {e}")
+
+            print("\nSummary of modifications within JSON files:")
+            if files_scanned_in_data_folder > 0:
+                print(f"  Files scanned in data folder: {files_scanned_in_data_folder}")
+                print(f"  Files where 'dataSetId' JSON key was updated: {dataset_id_json_key_updated_count}")
+                print(f"  Files where Account ID string ('{p_old_account_id}') was replaced: {account_id_replaced_in_files_count}")
+                print(f"  Files where DataSource ID string ('{p_old_datasource_id}') was replaced: {datasource_id_replaced_in_files_count}")
+            else:
+                print(f"  No JSON files found or processed in '{data_folder_path}'. This is expected if export was run with --no-include-all.")
+        else:
+            print("Warning: Neither 'dataset' nor 'datasource' directory found in the bundle. Cannot perform content modifications. This is expected if export was run with --no-include-all.")
+
+        base_output_name = os.path.splitext(output_modified_qs_path)[0]
         print(f"\nZipping modified content from '{temp_extract_dir}' to '{output_modified_qs_path}'...")
         created_zip_file = shutil.make_archive(base_name=base_output_name, format='zip', root_dir=temp_extract_dir)
-        if os.path.exists(output_modified_qs_path):
-            os.remove(output_modified_qs_path)
-        os.rename(created_zip_file, output_modified_qs_path)
-        print(f"Successfully created modified QS file: {os.path.abspath(output_modified_qs_path)}")
-        return os.path.abspath(output_modified_qs_path)
+
+        # Ensure the final file has .qs extension
+        final_qs_path = base_output_name + ".qs"
+        if os.path.exists(final_qs_path) and final_qs_path != created_zip_file :
+            os.remove(final_qs_path)
+        if created_zip_file != final_qs_path :
+            os.rename(created_zip_file, final_qs_path)
+        else:
+             final_qs_path = created_zip_file
+
+
+        print(f"Successfully created modified bundle file: {os.path.abspath(final_qs_path)}")
+        return os.path.abspath(final_qs_path)
+
     except Exception as e:
         print(f"An error occurred during QS file processing: {e}")
         return None
@@ -88,13 +167,18 @@ def export_quicksight_dashboard_and_modify(
     source_profile_name: str,
     dashboard_id: str,
     source_aws_region: str,
+    include_all_dependencies: bool, # New parameter
     output_file_path_base: str = None,
-    new_dataset_id_to_set: str = "XXXXXXXXXXXXX"
+    target_json_key_dataset_id_value: str = TARGET_JSON_KEY_DATASET_ID_VALUE
 ):
     print(f"Initiating QuickSight dashboard export for Dashboard ID: {dashboard_id} from account {source_aws_account_id} in {source_aws_region}")
-    
+    print(f"Include all dependencies: {include_all_dependencies}")
+
     try:
-        session = boto3.Session(profile_name=source_profile_name, region_name=source_aws_region)
+        session_params = {"region_name": source_aws_region}
+        if source_profile_name:
+            session_params["profile_name"] = source_profile_name
+        session = boto3.Session(**session_params)
         quicksight_client = session.client('quicksight')
     except Exception as e:
         print(f"Error creating Boto3 session or QuickSight client for source: {e}")
@@ -103,15 +187,15 @@ def export_quicksight_dashboard_and_modify(
     export_job_id = f"export-{dashboard_id.replace('-', '')}-{uuid.uuid4()}"
     dashboard_arn = f"arn:aws:quicksight:{source_aws_region}:{source_aws_account_id}:dashboard/{dashboard_id}"
 
-    base_name_for_output = output_file_path_base if output_file_path_base else f"./{dashboard_id}"
-    downloaded_qs_path = f"{base_name_for_output}.qs"
+    base_name_for_output = output_file_path_base if output_file_path_base else f"./{dashboard_id.replace(':', '_').replace('/', '_')}"
+    downloaded_qs_path = f"{base_name_for_output}_original.qs"
     modified_qs_path = f"{base_name_for_output}_modified.qs"
-    
-    output_dir = os.path.dirname(downloaded_qs_path)
+
+    output_dir = os.path.dirname(os.path.abspath(downloaded_qs_path))
     if output_dir and not os.path.exists(output_dir):
         os.makedirs(output_dir)
         print(f"Created output directory: {output_dir}")
-    
+
     try:
         print(f"\nStarting asset bundle export job (Job ID: {export_job_id})...")
         start_export_response = quicksight_client.start_asset_bundle_export_job(
@@ -119,7 +203,7 @@ def export_quicksight_dashboard_and_modify(
             AssetBundleExportJobId=export_job_id,
             ResourceArns=[dashboard_arn],
             ExportFormat='QUICKSIGHT_JSON',
-            IncludeAllDependencies=True,
+            IncludeAllDependencies=include_all_dependencies, # Use the passed parameter
         )
         print(f"Export job started successfully. ARN: {start_export_response.get('Arn')}")
     except Exception as e:
@@ -128,13 +212,13 @@ def export_quicksight_dashboard_and_modify(
 
     print("\nPolling export job status...")
     download_url = None
-    job_status = None
-    max_retries = 120 
+    job_status = "UNKNOWN"
+    max_retries = 120
     retries = 0
     while retries < max_retries:
         try:
             describe_job_response = quicksight_client.describe_asset_bundle_export_job(
-                AwsAccountId=source_aws_account_id, AssetBundleExportJobId=export_job_id )
+                AwsAccountId=source_aws_account_id, AssetBundleExportJobId=export_job_id)
             job_status = describe_job_response.get('JobStatus')
             print(f"Export Job status: {job_status} (Attempt {retries + 1}/{max_retries})")
             if job_status == 'SUCCESSFUL':
@@ -151,36 +235,45 @@ def export_quicksight_dashboard_and_modify(
             retries += 1
             time.sleep(10)
         except Exception as e:
-            print(f"Error describing export job: {e}")
+            print(f"Error describing export job status: {e}")
             time.sleep(10)
-            retries +=1 
+            retries +=1
             if retries >= max_retries:
-                 print(f"Max retries reached for export job. Last status: {job_status if job_status else 'UNKNOWN'}. Aborting.")
+                 print(f"Max retries reached for export job. Last status: {job_status}. Aborting.")
                  return None
             continue
-    
+
     if not download_url:
-        print(f"Export job did not succeed or no download URL. Last status: {job_status if job_status else 'UNKNOWN'}")
+        print(f"Export job did not succeed or no download URL was provided. Last status: {job_status}")
         return None
 
-    print(f"\nDownloading dashboard bundle to {downloaded_qs_path}...")
+    print(f"\nDownloading dashboard bundle to {os.path.abspath(downloaded_qs_path)}...")
     try:
         response = requests.get(download_url, stream=True)
         response.raise_for_status()
         with open(downloaded_qs_path, 'wb') as f:
-            for chunk in response.iter_content(chunk_size=8192): f.write(chunk)
-        print(f"Dashboard bundle downloaded successfully to: {os.path.abspath(downloaded_qs_path)}")
+            for chunk in response.iter_content(chunk_size=8192):
+                f.write(chunk)
+        print(f"Dashboard bundle downloaded successfully: {os.path.abspath(downloaded_qs_path)}")
     except Exception as e:
         print(f"Error downloading asset bundle: {e}")
         return None
 
-    final_modified_qs_file = process_qs_file(downloaded_qs_path, modified_qs_path, new_dataset_id_to_set)
-    
+    final_modified_qs_file = process_qs_file(
+        downloaded_qs_path,
+        modified_qs_path,
+        target_json_key_dataset_id_value,
+        OLD_ACCOUNT_ID_TO_REPLACE,
+        NEW_ACCOUNT_ID_FOR_REPLACEMENT,
+        OLD_DATASOURCE_ID_TO_REPLACE,
+        NEW_DATASOURCE_ID_FOR_REPLACEMENT
+    )
+
     if final_modified_qs_file:
-        print(f"\nExport and modification stage complete. Modified QS file: {final_modified_qs_file}")
+        print(f"\nExport and modification stage complete. Modified QS file available at: {final_modified_qs_file}")
         return final_modified_qs_file
     else:
-        print(f"\nProcessing of the QS file failed during export/modify stage.")
+        print("\nProcessing of the QS file failed or no modifications made during export/modify stage.")
         return None
 
 def import_quicksight_bundle(
@@ -193,31 +286,42 @@ def import_quicksight_bundle(
     print(f"Bundle file: {bundle_file_path}")
     print("IMPORTANT: This is a 'simple import' without OverrideParameters. For cross-account migrations, "
           "this may lead to failures if assets (like DataSources) in the bundle refer to ARNs "
-          "from the source account. Check import job errors carefully.")
+          "from the source account, or if other ID conflicts occur. Check import job errors carefully.")
+    if "--no-include-all" in " ".join(sys.argv): # Quick check if the flag was likely used for export
+        print("Warning: If this bundle was exported with --no-include-all, ensure all dependencies "
+              "(DataSources, DataSets, Themes) exist and are accessible in the target account.")
+
 
     try:
-        target_session = boto3.Session(profile_name=target_profile, region_name=target_aws_region)
+        session_params = {"region_name": target_aws_region}
+        if target_profile:
+            session_params["profile_name"] = target_profile
+        target_session = boto3.Session(**session_params)
         target_quicksight_client = target_session.client('quicksight')
     except Exception as e:
         print(f"Error creating Boto3 session for target account: {e}")
         return False
 
+    if not os.path.exists(bundle_file_path):
+        print(f"Error: Bundle file not found at path: {bundle_file_path}")
+        return False
+
     try:
         with open(bundle_file_path, 'rb') as f:
             bundle_body = f.read()
-        
+
         file_size_mb = len(bundle_body) / (1024 * 1024)
         print(f"Bundle file size: {file_size_mb:.2f} MB")
-        if file_size_mb > 20: # AWS API direct upload limit for 'Body'
-            print("Error: Bundle file size exceeds 20MB. This script currently uses direct body upload. "
-                  "For larger files, consider using AWS Console import or a script that supports S3-URI based imports.")
-            return False
+        if file_size_mb > 40:
+             print("Warning: Bundle file size is large. AWS API might have limitations for direct upload."
+                   "If import fails, consider using S3 URI based import via AWS Console or an updated script.")
+
         import_source = {'Body': bundle_body}
     except Exception as e:
         print(f"Error reading bundle file '{bundle_file_path}': {e}")
         return False
 
-    base_bundle_name = os.path.basename(bundle_file_path).replace('.qs', '').replace('_modified', '')
+    base_bundle_name = os.path.basename(bundle_file_path).rsplit('.', 1)[0].replace('_modified', '').replace('_original', '')
     import_job_id = f"import-{base_bundle_name}-{uuid.uuid4()}"
     print(f"Generated Import Job ID: {import_job_id}")
 
@@ -226,9 +330,8 @@ def import_quicksight_bundle(
             'AwsAccountId': target_aws_account_id,
             'AssetBundleImportJobId': import_job_id,
             'AssetBundleImportSource': import_source
-            # OverrideParameters are intentionally omitted for "simple import"
         }
-        
+
         start_import_response = target_quicksight_client.start_asset_bundle_import_job(**start_import_params)
         print(f"Import job started successfully. ARN: {start_import_response.get('Arn')}")
     except Exception as e:
@@ -253,7 +356,7 @@ def import_quicksight_bundle(
             if job_status == 'SUCCESSFUL':
                 print("Import job SUCCEEDED.")
                 print(f"Imported assets should now be available in account {target_aws_account_id}, region {target_aws_region}.")
-                print("Please verify their functionality, especially data source connections.")
+                print("Please verify their functionality, especially data source connections and dataset refresh capabilities.")
                 return True
             elif job_status in ['FAILED', 'CANCELLED']:
                 print(f"Import job {job_status}.")
@@ -261,10 +364,10 @@ def import_quicksight_bundle(
                     print("Errors from import job:")
                     for error in describe_job_response['Errors']:
                         error_message = f"  - Type: {error.get('Type')}, Message: {error.get('Message')}"
-                        if 'ViolatedEntities' in error:
+                        if 'ViolatedEntities' in error and error['ViolatedEntities']:
                              error_message += f", Violated Entities: {error.get('ViolatedEntities')}"
                         print(error_message)
-                        if 'Errors' in error: # Nested errors
+                        if 'Errors' in error and isinstance(error['Errors'], list):
                             for sub_error in error['Errors']:
                                 print(f"    - Sub-Type: {sub_error.get('Type')}, Sub-Message: {sub_error.get('Message')}")
                 return False
@@ -272,65 +375,105 @@ def import_quicksight_bundle(
             time.sleep(10)
         except Exception as e:
             print(f"Error describing asset bundle import job: {e}")
-            time.sleep(10) 
+            time.sleep(10)
             retries +=1
             if retries >= max_retries:
                 print(f"Max retries reached. Last import job status: {final_status}. Aborting.")
                 return False
             continue
-            
-    print(f"Import job did not reach a terminal state. Last status: {final_status}.")
+
+    print(f"Import job did not reach a terminal state after {max_retries} retries. Last status: {final_status}.")
     return False
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Export, modify, and optionally import a QuickSight dashboard.")
-    
-    export_group = parser.add_argument_group('Export Options')
-    export_group.add_argument("--source-account-id", required=True, help="AWS Account ID of the source QuickSight environment.")
-    export_group.add_argument("--source-profile", required=True, help="AWS CLI profile name for the source account.")
-    export_group.add_argument("--dashboard-id", required=True, help="The ID of the QuickSight dashboard to export from source.")
-    export_group.add_argument("--aws-region", required=True, help="AWS region for the SOURCE QuickSight account (e.g., 'us-east-1').")
-    export_group.add_argument("--output-file-base", help="Optional. Base path and name for output files (e.g., './exports/mydash'). Defaults to './<dashboard_id>'")
-
-    import_group = parser.add_argument_group('Import Options')
-    import_group.add_argument("--perform-import", action="store_true", help="If set, attempts to import the bundle to a target account after export and modification.")
-    import_group.add_argument("--target-account-id", help="Target AWS Account ID for import.")
-    import_group.add_argument("--target-profile", help="AWS CLI profile for the target account.")
-    import_group.add_argument("--target-aws-region", help="AWS Region for the target QuickSight account.")
-    # --override-parameters-json argument removed
-    
-    args = parser.parse_args()
-
-    if args.perform_import:
-        if not all([args.target_account_id, args.target_profile, args.target_aws_region]):
-            parser.error("--target-account-id, --target-profile, and --target-aws-region are required when --perform-import is set.")
-
-    modified_qs_file_path = export_quicksight_dashboard_and_modify(
-        source_aws_account_id=args.source_account_id,
-        source_profile_name=args.source_profile,
-        dashboard_id=args.dashboard_id,
-        source_aws_region=args.aws_region,
-        output_file_path_base=args.output_file_base,
-        new_dataset_id_to_set=NEW_DATASET_ID_TO_SET
+    import sys # Required for sys.argv check in import_quicksight_bundle
+    parser = argparse.ArgumentParser(
+        description="Export a QuickSight dashboard, modify its contents, and optionally import it to a target account.",
+        formatter_class=argparse.RawTextHelpFormatter
     )
 
-    if modified_qs_file_path and args.perform_import:
+    action_group = parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument("--export-only", action="store_true", help="Only perform export and modification. Do not import.")
+    action_group.add_argument("--export-and-import", action="store_true", help="Perform export, modification, AND import to target.")
+    action_group.add_argument("--import-only", action="store_true", help="Only perform import using an existing modified bundle file.")
+
+
+    export_group = parser.add_argument_group('Export Options (required if not --import-only)')
+    export_group.add_argument("--source-account-id", help="AWS Account ID of the source QuickSight environment.")
+    export_group.add_argument("--source-profile", help="AWS CLI profile name for the source account (optional).")
+    export_group.add_argument("--dashboard-id", help="The ID of the QuickSight dashboard to export from source.")
+    export_group.add_argument("--source-aws-region", help="AWS region for the SOURCE QuickSight account (e.g., 'us-east-1').")
+    export_group.add_argument("--output-file-base", help="Optional. Base path and name for output files (e.g., './exports/mydash'). Defaults to './<dashboard_id>' structure.")
+    export_group.add_argument(
+        "--no-include-all",
+        action="store_false",
+        dest="include_all_dependencies",
+        default=True, # This makes dest 'include_all_dependencies' True by default
+        help="If set, export ONLY the dashboard definition, NOT its dependencies (datasets, data sources, themes).\n"
+             "This may require dependencies to exist and be accessible in the target account.\n"
+             "By default, all dependencies ARE included."
+    )
+
+
+    import_group = parser.add_argument_group('Import Options (required if not --export-only)')
+    import_group.add_argument("--target-account-id", help="Target AWS Account ID for import.")
+    import_group.add_argument("--target-profile", help="AWS CLI profile for the target account (optional).")
+    import_group.add_argument("--target-aws-region", help="AWS Region for the target QuickSight account.")
+    import_group.add_argument("--input-bundle-file", help="Path to the .qs bundle file to import (required for --import-only).")
+
+    args = parser.parse_args()
+
+    modified_qs_file_to_import = None
+
+    if args.export_only or args.export_and_import:
+        if not all([args.source_account_id, args.dashboard_id, args.source_aws_region]):
+            parser.error("--source-account-id, --dashboard-id, and --source-aws-region are required for export actions.")
+        print("--- Starting Export and Modification Process ---")
+        modified_qs_file_to_import = export_quicksight_dashboard_and_modify(
+            source_aws_account_id=args.source_account_id,
+            source_profile_name=args.source_profile,
+            dashboard_id=args.dashboard_id,
+            source_aws_region=args.source_aws_region,
+            include_all_dependencies=args.include_all_dependencies, # Pass the parsed arg
+            output_file_path_base=args.output_file_base,
+            target_json_key_dataset_id_value=TARGET_JSON_KEY_DATASET_ID_VALUE
+        )
+        if not modified_qs_file_to_import:
+            print("\nExport and modification process failed or did not produce a file. Aborting.")
+            exit(1)
+        if args.export_only:
+            print("\n--- Export and modification complete. Import step was not requested. ---")
+            print(f"Modified bundle file is available at: {modified_qs_file_to_import}")
+            exit(0)
+
+    if args.import_only:
+        if not args.input_bundle_file:
+            parser.error("--input-bundle-file is required when using --import-only.")
+        if not os.path.exists(args.input_bundle_file):
+            print(f"Error: Input bundle file for import not found: {args.input_bundle_file}")
+            exit(1)
+        modified_qs_file_to_import = os.path.abspath(args.input_bundle_file)
+        print(f"--- Preparing for Import-Only using: {modified_qs_file_to_import} ---")
+
+
+    if args.export_and_import or args.import_only:
+        if not all([args.target_account_id, args.target_aws_region]):
+            parser.error("--target-account-id and --target-aws-region are required for import actions.")
+        if not modified_qs_file_to_import:
+             print("\nError: No bundle file specified or generated for import. Aborting.")
+             exit(1)
+
         print("\n--- Starting Import Process ---")
         import_successful = import_quicksight_bundle(
             target_aws_account_id=args.target_account_id,
             target_profile=args.target_profile,
             target_aws_region=args.target_aws_region,
-            bundle_file_path=modified_qs_file_path
-            # No override_parameters_json_path passed
+            bundle_file_path=modified_qs_file_to_import
         )
         if import_successful:
-            print("\n--- Import process completed successfully. Please verify assets in the target account. ---")
+            print("\n--- Import process completed successfully. Please verify assets in the target QuickSight account. ---")
         else:
-            print("\n--- Import process failed or did not complete. ---")
-    elif not modified_qs_file_path and args.perform_import:
-        print("\nSkipping import because the export/modification step failed to produce a bundle file.")
-    elif modified_qs_file_path and not args.perform_import:
-        print("\nExport and modification complete. Import step was not requested.")
-        print(f"Final modified bundle file is at: {modified_qs_file_path}")
-    else:
-        print("\nExport and modification process failed. No file to import.")
+            print("\n--- Import process failed or did not complete. Review logs for details. ---")
+            exit(1)
+    
+    print("\nScript execution finished.")
