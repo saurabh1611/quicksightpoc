@@ -102,13 +102,12 @@ jobs:
             PYTHONUNBUFFERED: "1" # Ensures Python script logs appear in real-time in Actions
         run: |
           # Ensure your Python script is named correctly below (e.g., export_quicksight_dashboard.py)
-          python export_quicksight_dashboard.py \
+          python export_quicksight_dashboard.py --export-and-import \
             --source-account-id "${{ inputs.source_account_id }}" \
             --source-profile "source" \
             --dashboard-id "${{ inputs.dashboard_id }}" \
-            --aws-region "${{ inputs.source_aws_region }}" \
+            --source-aws-region "${{ inputs.source_aws_region }}" \
             --output-file-base "${{ inputs.output_file_base }}" \
-            --perform-import \
             --target-account-id "${{ inputs.target_account_id }}" \
             --target-profile "default" \
             --target-aws-region "${{ inputs.target_aws_region }}"
