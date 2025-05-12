@@ -8,35 +8,39 @@ import zipfile
 import json
 import tempfile
 import shutil
+import sys # Required for sys.argv check in import_quicksight_bundle
 
 # --- Configuration for Content Modifications ---
-# Value to set for the "dataSetId" JSON key in dataset definition files
-TARGET_JSON_KEY_DATASET_ID_VALUE = "XXXXXXXXXXXXX"
 
-# Values for global string replacement of Account ID within JSON files
+# 1. Specific DEV to QA Dataset ID replacements within JSON files in the 'dashboard' folder
+DASHBOARD_SPECIFIC_REPLACEMENTS = {
+    "3519323f-3db4-4585-a0c1-a1df2698e3e0": "221553ff-d80a-4861-8890-ae7e028016b7",
+    "bb9c4023-1f25-472b-bf31-7a8ded7c2c69": "8955b0d0-ee47-4915-aac4-c4f9dffa6821",
+    "7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87": "52825973-e237-4adb-8fe8-015c046066b4",
+    # Add any other specific ID replacements for dashboard files here
+    # e.g., "another-dev-id": "corresponding-qa-id"
+}
+
+# 2. Values for global string replacement of generic Account ID within JSON files (in 'dataset'/'datasource' folder)
 OLD_ACCOUNT_ID_TO_REPLACE = "470822489487"
 NEW_ACCOUNT_ID_FOR_REPLACEMENT = "470822489488"
 
-# Values for global string replacement of DataSource ID within JSON files
-OLD_DATASOURCE_ID_TO_REPLACE = "87e2b03f-58a7-4df5-af8f-43d0ae4788cd"
-NEW_DATASOURCE_ID_FOR_REPLACEMENT = "87e2b03f-58a7-4df5-af8f-43d0ae4788ef"
+# TARGET_JSON_KEY_DATASET_ID_VALUE and generic DataSource ID replacements have been removed as per request.
+
 # --- End of Configuration ---
 
 def process_qs_file(
     downloaded_qs_path: str,
     output_modified_qs_path: str,
-    target_dataset_id_json_key_value: str, # Value for "dataSetId" key
-    p_old_account_id: str,
-    p_new_account_id: str,
-    p_old_datasource_id: str,
-    p_new_datasource_id: str
+    dashboard_replacements_map: dict,          # For specific replacements in 'dashboard' folder
+    p_old_account_id: str,                     # Generic Account ID old value for 'dataset' folder
+    p_new_account_id: str                      # Generic Account ID new value for 'dataset' folder
 ):
     """
     Unzips a .qs file, modifies specified content in JSON files, and zips it back.
     Modifications include:
-    1. Global string replacement of Account ID.
-    2. Global string replacement of DataSource ID.
-    3. Targeted update of the top-level "dataSetId" key in JSON objects.
+    1. Specific string replacements in 'dashboard' folder JSON files.
+    2. Global string replacement of generic Account ID in 'dataset'/'datasource' folder JSON files.
     """
     print(f"\nProcessing downloaded QS file: {downloaded_qs_path}")
     temp_extract_dir = tempfile.mkdtemp()
@@ -48,112 +52,113 @@ def process_qs_file(
             zip_ref.extractall(temp_extract_dir)
         print("Unzipping complete.")
 
+        # --- Stage 1: Process files in 'dashboard' folder for specific replacements ---
+        dashboard_folder_path = os.path.join(temp_extract_dir, "dashboard")
+        dashboard_files_processed_count = 0
+        dashboard_string_replacements_done_count = 0
+
+        if os.path.isdir(dashboard_folder_path):
+            print(f"\nProcessing JSON files in 'dashboard' folder: {dashboard_folder_path}")
+            for filename in os.listdir(dashboard_folder_path):
+                if filename.endswith(".json"):
+                    dashboard_files_processed_count += 1
+                    file_path = os.path.join(dashboard_folder_path, filename)
+                    print(f"  Processing dashboard file: {filename}")
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            content_string = f.read()
+                        
+                        original_content_string = content_string
+                        for dev_id, qa_id in dashboard_replacements_map.items():
+                            if dev_id in content_string:
+                                content_string = content_string.replace(dev_id, qa_id)
+                                print(f"    Replaced in dashboard file: '{dev_id}' with '{qa_id}'")
+                        
+                        if content_string != original_content_string:
+                            dashboard_string_replacements_done_count +=1
+                            with open(file_path, 'w', encoding='utf-8') as f:
+                                f.write(content_string)
+                            print(f"    Dashboard file {filename} updated with specific replacements.")
+                        else:
+                            print(f"    No specific dashboard replacements made in {filename}.")
+
+                    except Exception as e:
+                        print(f"  ERROR: An unexpected error occurred while processing dashboard file {filename}: {e}")
+            print("\nSummary of 'dashboard' folder modifications:")
+            print(f"  Dashboard JSON files scanned: {dashboard_files_processed_count}")
+            print(f"  Dashboard files where specific string replacements were made: {dashboard_string_replacements_done_count}")
+        else:
+            print("\nWarning: 'dashboard' directory not found in the bundle. Skipping specific dashboard replacements.")
+
+
+        # --- Stage 2: Process files in 'dataset' or 'datasource' folder for generic Account ID replacement ---
         possible_data_folders = ["dataset", "datasource"]
         data_folder_path = None
         for folder_name in possible_data_folders:
             current_path = os.path.join(temp_extract_dir, folder_name)
             if os.path.isdir(current_path):
                 data_folder_path = current_path
-                print(f"Found data definition folder: '{folder_name}' at '{data_folder_path}'")
+                print(f"\nFound data definition folder for generic Account ID replacement: '{folder_name}' at '{data_folder_path}'")
                 break
 
-        files_scanned_in_data_folder = 0
-        dataset_id_json_key_updated_count = 0
+        dataset_files_scanned = 0
         account_id_replaced_in_files_count = 0
-        datasource_id_replaced_in_files_count = 0
-
+        
         if data_folder_path:
-            print(f"Scanning for JSON files in '{data_folder_path}' to perform modifications...")
+            print(f"Scanning for JSON files in '{os.path.basename(data_folder_path)}' folder to perform generic Account ID modifications...")
             for filename in os.listdir(data_folder_path):
                 if filename.endswith(".json"):
-                    files_scanned_in_data_folder += 1
+                    dataset_files_scanned += 1
                     file_path = os.path.join(data_folder_path, filename)
-                    print(f"  Processing file: {filename}")
+                    print(f"  Processing dataset/datasource file for Account ID: {filename}")
 
                     file_had_account_id_replaced = False
-                    file_had_datasource_id_replaced = False
-                    file_had_dataset_id_key_updated = False
-
+                    
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             raw_content_string = f.read()
-
                         modified_content_string = raw_content_string
 
-                        # Perform global string replacement for Account ID
                         if p_old_account_id in modified_content_string:
                             temp_str = modified_content_string.replace(p_old_account_id, p_new_account_id)
                             if temp_str != modified_content_string:
                                 modified_content_string = temp_str
-                                print(f"    Replaced Account ID string '{p_old_account_id}' with '{p_new_account_id}'.")
+                                print(f"    Replaced generic Account ID string '{p_old_account_id}' with '{p_new_account_id}'.")
                                 file_had_account_id_replaced = True
-
-                        # Perform global string replacement for DataSource ID
-                        if p_old_datasource_id in modified_content_string:
-                            temp_str = modified_content_string.replace(p_old_datasource_id, p_new_datasource_id)
-                            if temp_str != modified_content_string:
-                                modified_content_string = temp_str
-                                print(f"    Replaced DataSource ID string '{p_old_datasource_id}' with '{p_new_datasource_id}'.")
-                                file_had_datasource_id_replaced = True
-
-                        content_dict = json.loads(modified_content_string)
-
-                        if isinstance(content_dict, dict) and "dataSetId" in content_dict:
-                            original_json_dataset_id = content_dict["dataSetId"]
-                            if original_json_dataset_id != target_dataset_id_json_key_value:
-                                print(f"    Original 'dataSetId' key: {original_json_dataset_id}, changing to {target_dataset_id_json_key_value}.")
-                                content_dict["dataSetId"] = target_dataset_id_json_key_value
-                                file_had_dataset_id_key_updated = True
-                            else:
-                                print(f"    'dataSetId' key is already {target_dataset_id_json_key_value}. No change to key value.")
-
-                        final_json_string_to_write = json.dumps(content_dict, indent=2)
-
-                        with open(file_path, 'w', encoding='utf-8') as f:
-                            f.write(final_json_string_to_write)
-
+                        
+                        # No need to parse to JSON if only doing string replacement for Account ID
+                        # and not other JSON key specific modifications in this section.
+                        # If other JSON key modifications were needed here, we would parse then dump.
                         if file_had_account_id_replaced:
-                            account_id_replaced_in_files_count += 1
-                        if file_had_datasource_id_replaced:
-                            datasource_id_replaced_in_files_count += 1
-                        if file_had_dataset_id_key_updated:
-                            dataset_id_json_key_updated_count += 1
+                             with open(file_path, 'w', encoding='utf-8') as f:
+                                f.write(modified_content_string)
+                             account_id_replaced_in_files_count += 1
 
-                    except json.JSONDecodeError as jde:
-                        print(f"  ERROR: Failed to decode JSON for {filename} after string replacements. File may be malformed. Error: {jde}")
-                        print(f"         Problematic content snippet (first 500 chars): \n{modified_content_string[:500]}...")
-                        print(f"  IMPORTANT: {filename} was NOT updated due to this JSON parsing error.")
                     except Exception as e:
-                        print(f"  ERROR: An unexpected error occurred while processing file {filename}: {e}")
-
-            print("\nSummary of modifications within JSON files:")
-            if files_scanned_in_data_folder > 0:
-                print(f"  Files scanned in data folder: {files_scanned_in_data_folder}")
-                print(f"  Files where 'dataSetId' JSON key was updated: {dataset_id_json_key_updated_count}")
-                print(f"  Files where Account ID string ('{p_old_account_id}') was replaced: {account_id_replaced_in_files_count}")
-                print(f"  Files where DataSource ID string ('{p_old_datasource_id}') was replaced: {datasource_id_replaced_in_files_count}")
+                        print(f"  ERROR: An unexpected error occurred while processing {filename} for Account ID replacement: {e}")
+            
+            print(f"\nSummary of '{os.path.basename(data_folder_path)}' folder modifications (Account ID):")
+            if dataset_files_scanned > 0:
+                print(f"  Files scanned: {dataset_files_scanned}")
+                print(f"  Files where generic Account ID string was replaced: {account_id_replaced_in_files_count}")
             else:
-                print(f"  No JSON files found or processed in '{data_folder_path}'. This is expected if export was run with --no-include-all.")
+                print(f"  No JSON files found or processed in '{os.path.basename(data_folder_path)}'. This is expected if export was run with --no-include-all.")
         else:
-            print("Warning: Neither 'dataset' nor 'datasource' directory found in the bundle. Cannot perform content modifications. This is expected if export was run with --no-include-all.")
+            print(f"\nWarning: Neither 'dataset' nor 'datasource' directory found for generic Account ID replacements. This is expected if export was run with --no-include-all.")
 
+        # --- Stage 3: Re-zip the bundle ---
         base_output_name = os.path.splitext(output_modified_qs_path)[0]
         print(f"\nZipping modified content from '{temp_extract_dir}' to '{output_modified_qs_path}'...")
         created_zip_file = shutil.make_archive(base_name=base_output_name, format='zip', root_dir=temp_extract_dir)
-
-        # Ensure the final file has .qs extension
         final_qs_path = base_output_name + ".qs"
-        if os.path.exists(final_qs_path) and final_qs_path != created_zip_file :
+        if os.path.exists(final_qs_path) and final_qs_path != created_zip_file:
             os.remove(final_qs_path)
-        if created_zip_file != final_qs_path :
+        if created_zip_file != final_qs_path:
             os.rename(created_zip_file, final_qs_path)
         else:
              final_qs_path = created_zip_file
-
-
         print(f"Successfully created modified bundle file: {os.path.abspath(final_qs_path)}")
         return os.path.abspath(final_qs_path)
-
     except Exception as e:
         print(f"An error occurred during QS file processing: {e}")
         return None
@@ -167,9 +172,12 @@ def export_quicksight_dashboard_and_modify(
     source_profile_name: str,
     dashboard_id: str,
     source_aws_region: str,
-    include_all_dependencies: bool, # New parameter
+    include_all_dependencies: bool,
     output_file_path_base: str = None,
-    target_json_key_dataset_id_value: str = TARGET_JSON_KEY_DATASET_ID_VALUE
+    # Pass the modification maps and values
+    dashboard_replacements: dict = DASHBOARD_SPECIFIC_REPLACEMENTS,
+    old_acct_id: str = OLD_ACCOUNT_ID_TO_REPLACE,
+    new_acct_id: str = NEW_ACCOUNT_ID_FOR_REPLACEMENT
 ):
     print(f"Initiating QuickSight dashboard export for Dashboard ID: {dashboard_id} from account {source_aws_account_id} in {source_aws_region}")
     print(f"Include all dependencies: {include_all_dependencies}")
@@ -203,7 +211,7 @@ def export_quicksight_dashboard_and_modify(
             AssetBundleExportJobId=export_job_id,
             ResourceArns=[dashboard_arn],
             ExportFormat='QUICKSIGHT_JSON',
-            IncludeAllDependencies=include_all_dependencies, # Use the passed parameter
+            IncludeAllDependencies=include_all_dependencies,
         )
         print(f"Export job started successfully. ARN: {start_export_response.get('Arn')}")
     except Exception as e:
@@ -229,8 +237,8 @@ def export_quicksight_dashboard_and_modify(
                 print(f"Export job {job_status}.")
                 if 'Errors' in describe_job_response:
                     print("Errors from export job:")
-                    for error in describe_job_response['Errors']:
-                        print(f"  - Type: {error.get('Type')}, Message: {error.get('Message')}, ARN: {error.get('Arn')}")
+                    for error_item in describe_job_response['Errors']: # Renamed to avoid conflict
+                        print(f"  - Type: {error_item.get('Type')}, Message: {error_item.get('Message')}, ARN: {error_item.get('Arn')}")
                 return None
             retries += 1
             time.sleep(10)
@@ -262,11 +270,11 @@ def export_quicksight_dashboard_and_modify(
     final_modified_qs_file = process_qs_file(
         downloaded_qs_path,
         modified_qs_path,
-        target_json_key_dataset_id_value,
-        OLD_ACCOUNT_ID_TO_REPLACE,
-        NEW_ACCOUNT_ID_FOR_REPLACEMENT,
-        OLD_DATASOURCE_ID_TO_REPLACE,
-        NEW_DATASOURCE_ID_FOR_REPLACEMENT
+        dashboard_replacements,
+        # Removed target_dataset_id_json_key_value
+        old_acct_id,
+        new_acct_id
+        # Removed p_old_datasource_id, p_new_datasource_id
     )
 
     if final_modified_qs_file:
@@ -287,7 +295,7 @@ def import_quicksight_bundle(
     print("IMPORTANT: This is a 'simple import' without OverrideParameters. For cross-account migrations, "
           "this may lead to failures if assets (like DataSources) in the bundle refer to ARNs "
           "from the source account, or if other ID conflicts occur. Check import job errors carefully.")
-    if "--no-include-all" in " ".join(sys.argv): # Quick check if the flag was likely used for export
+    if "--no-include-all" in " ".join(sys.argv).lower():
         print("Warning: If this bundle was exported with --no-include-all, ensure all dependencies "
               "(DataSources, DataSets, Themes) exist and are accessible in the target account.")
 
@@ -312,7 +320,7 @@ def import_quicksight_bundle(
 
         file_size_mb = len(bundle_body) / (1024 * 1024)
         print(f"Bundle file size: {file_size_mb:.2f} MB")
-        if file_size_mb > 40:
+        if file_size_mb > 40: 
              print("Warning: Bundle file size is large. AWS API might have limitations for direct upload."
                    "If import fails, consider using S3 URI based import via AWS Console or an updated script.")
 
@@ -362,13 +370,13 @@ def import_quicksight_bundle(
                 print(f"Import job {job_status}.")
                 if 'Errors' in describe_job_response:
                     print("Errors from import job:")
-                    for error in describe_job_response['Errors']:
-                        error_message = f"  - Type: {error.get('Type')}, Message: {error.get('Message')}"
-                        if 'ViolatedEntities' in error and error['ViolatedEntities']:
-                             error_message += f", Violated Entities: {error.get('ViolatedEntities')}"
+                    for error_item in describe_job_response['Errors']: # Renamed to avoid conflict
+                        error_message = f"  - Type: {error_item.get('Type')}, Message: {error_item.get('Message')}"
+                        if 'ViolatedEntities' in error_item and error_item['ViolatedEntities']:
+                             error_message += f", Violated Entities: {error_item.get('ViolatedEntities')}"
                         print(error_message)
-                        if 'Errors' in error and isinstance(error['Errors'], list):
-                            for sub_error in error['Errors']:
+                        if 'Errors' in error_item and isinstance(error_item['Errors'], list):
+                            for sub_error in error_item['Errors']:
                                 print(f"    - Sub-Type: {sub_error.get('Type')}, Sub-Message: {sub_error.get('Message')}")
                 return False
             retries += 1
@@ -386,7 +394,6 @@ def import_quicksight_bundle(
     return False
 
 if __name__ == "__main__":
-    import sys # Required for sys.argv check in import_quicksight_bundle
     parser = argparse.ArgumentParser(
         description="Export a QuickSight dashboard, modify its contents, and optionally import it to a target account.",
         formatter_class=argparse.RawTextHelpFormatter
@@ -408,12 +415,11 @@ if __name__ == "__main__":
         "--no-include-all",
         action="store_false",
         dest="include_all_dependencies",
-        default=True, # This makes dest 'include_all_dependencies' True by default
+        default=True,
         help="If set, export ONLY the dashboard definition, NOT its dependencies (datasets, data sources, themes).\n"
              "This may require dependencies to exist and be accessible in the target account.\n"
              "By default, all dependencies ARE included."
     )
-
 
     import_group = parser.add_argument_group('Import Options (required if not --export-only)')
     import_group.add_argument("--target-account-id", help="Target AWS Account ID for import.")
@@ -434,24 +440,29 @@ if __name__ == "__main__":
             source_profile_name=args.source_profile,
             dashboard_id=args.dashboard_id,
             source_aws_region=args.source_aws_region,
-            include_all_dependencies=args.include_all_dependencies, # Pass the parsed arg
+            include_all_dependencies=args.include_all_dependencies,
             output_file_path_base=args.output_file_base,
-            target_json_key_dataset_id_value=TARGET_JSON_KEY_DATASET_ID_VALUE
+            # Constants are used by default for modifications
+            dashboard_replacements=DASHBOARD_SPECIFIC_REPLACEMENTS,
+            # target_json_key_ds_id_val is removed
+            old_acct_id=OLD_ACCOUNT_ID_TO_REPLACE,
+            new_acct_id=NEW_ACCOUNT_ID_FOR_REPLACEMENT
+            # old_ds_id and new_ds_id are removed
         )
         if not modified_qs_file_to_import:
             print("\nExport and modification process failed or did not produce a file. Aborting.")
-            exit(1)
+            sys.exit(1) 
         if args.export_only:
             print("\n--- Export and modification complete. Import step was not requested. ---")
             print(f"Modified bundle file is available at: {modified_qs_file_to_import}")
-            exit(0)
+            sys.exit(0)
 
     if args.import_only:
         if not args.input_bundle_file:
             parser.error("--input-bundle-file is required when using --import-only.")
         if not os.path.exists(args.input_bundle_file):
             print(f"Error: Input bundle file for import not found: {args.input_bundle_file}")
-            exit(1)
+            sys.exit(1)
         modified_qs_file_to_import = os.path.abspath(args.input_bundle_file)
         print(f"--- Preparing for Import-Only using: {modified_qs_file_to_import} ---")
 
@@ -461,7 +472,7 @@ if __name__ == "__main__":
             parser.error("--target-account-id and --target-aws-region are required for import actions.")
         if not modified_qs_file_to_import:
              print("\nError: No bundle file specified or generated for import. Aborting.")
-             exit(1)
+             sys.exit(1)
 
         print("\n--- Starting Import Process ---")
         import_successful = import_quicksight_bundle(
@@ -474,6 +485,6 @@ if __name__ == "__main__":
             print("\n--- Import process completed successfully. Please verify assets in the target QuickSight account. ---")
         else:
             print("\n--- Import process failed or did not complete. Review logs for details. ---")
-            exit(1)
+            sys.exit(1)
     
     print("\nScript execution finished.")
