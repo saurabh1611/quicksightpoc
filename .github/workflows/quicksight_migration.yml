@@ -3,38 +3,23 @@ name: QuickSight Dashboard Migration
 on:
   workflow_dispatch:
     inputs:
-      source_account_id:
-        description: 'Source AWS Account ID (e.g., 470822489487)'
-        required: true
-        type: string
       dashboard_id:
-        description: 'QuickSight Dashboard ID to export from source (e.g., e2df01c2-2bbb-42a5-84cf-56a652631ec1)'
+        description: 'QuickSight Dashboard ID to promote'
         required: true
         type: string
-      source_aws_region:
-        description: 'AWS region for the SOURCE QuickSight account (e.g., us-east-1)'
+      promotion_environment:
+        description: 'Select the promotion environment'
         required: true
-        type: string
-        default: 'us-east-1'
-      target_account_id:
-        description: 'Target AWS Account ID for import (e.g., 269801428807)'
-        required: true
-        type: string
-      target_aws_region:
-        description: 'AWS Region for the TARGET QuickSight account (e.g., us-east-1)'
-        required: true
-        type: string
-        default: 'us-east-1'
-      output_file_base:
-        description: "Optional. Base path and name for output files (e.g., './exports/mydash'). Script defaults if empty."
-        required: false
-        type: string
-        default: './quicksight_migration_output' # Default for workflow runs
+        type: choice
+        options:
+          - 'DEV to QA'
+          - 'QA to STAGE'
+          - 'STAGE to PROD'
 
 jobs:
   migrate_quicksight_dashboard:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -42,72 +27,64 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.10' # Or your preferred Python version compatible with the script
+          python-version: '3.10'
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Install boto3 and requests, required by your Python script
-          pip install boto3 requests 
-          # If you prefer using a requirements.txt file:
-          # 1. Create a requirements.txt file in your repository with:
-          #    boto3>=1.20.0
-          #    requests>=2.25.0
-          # 2. Uncomment the line below and comment out "pip install boto3 requests":
-          # pip install -r requirements.txt
+          pip install boto3 requests
+
+      - name: Determine AWS Account IDs
+        id: set_account_ids
+        run: |
+          case "${{ inputs.promotion_environment }}" in
+            "DEV to QA")
+              echo "source_account_id=11111" >> "$GITHUB_OUTPUT"
+              echo "target_account_id=22222" >> "$GITHUB_OUTPUT"
+              ;;
+            "QA to STAGE")
+              echo "source_account_id=22222" >> "$GITHUB_OUTPUT"
+              echo "target_account_id=33333" >> "$GITHUB_OUTPUT"
+              ;;
+            "STAGE to PROD")
+              echo "source_account_id=33333" >> "$GITHUB_OUTPUT"
+              echo "target_account_id=44444" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Invalid promotion environment selected."
+              exit 1
+              ;;
+          esac
 
       - name: Configure AWS Credentials and Config Files
-        shell: bash # Ensures bash specific syntax like `mkdir -p` works as expected
+        shell: bash
         run: |
           mkdir -p ~/.aws
-          echo "Configuring AWS credentials for named profiles 'source' and 'default'..."
-
-          # === Source Profile (named 'source') ===
           echo "[source]" > ~/.aws/credentials
           echo "aws_access_key_id = ${{ secrets.SOURCE_AWS_ACCESS_KEY_ID }}" >> ~/.aws/credentials
           echo "aws_secret_access_key = ${{ secrets.SOURCE_AWS_SECRET_ACCESS_KEY }}" >> ~/.aws/credentials
-          # Uncomment the following lines if using temporary credentials (e.g., from an IAM role session) for the source profile
-          # if [ -n "${{ secrets.SOURCE_AWS_SESSION_TOKEN }}" ]; then
-          #   echo "aws_session_token = ${{ secrets.SOURCE_AWS_SESSION_TOKEN }}" >> ~/.aws/credentials
-          # fi
-
           echo "[profile source]" > ~/.aws/config
-          echo "region = ${{ inputs.source_aws_region }}" >> ~/.aws/config
-          echo "output = json" >> ~/.aws/config # Default output format, can be adjusted
-
-          # === Target Profile (named 'default') ===
-          echo "" >> ~/.aws/credentials # Add a newline for better separation in the credentials file
-          echo "[default]" >> ~/.aws/credentials # This will be the default profile for the target account
+          echo "region = us-east-1" >> ~/.aws/config
+          echo "output = json" >> ~/.aws/config
+          echo "" >> ~/.aws/credentials
+          echo "[default]" >> ~/.aws/credentials
           echo "aws_access_key_id = ${{ secrets.TARGET_AWS_ACCESS_KEY_ID }}" >> ~/.aws/credentials
           echo "aws_secret_access_key = ${{ secrets.TARGET_AWS_SECRET_ACCESS_KEY }}" >> ~/.aws/credentials
-          # Uncomment the following lines if using temporary credentials for the target profile
-          # if [ -n "${{ secrets.TARGET_AWS_SESSION_TOKEN }}" ]; then
-          #   echo "aws_session_token = ${{ secrets.TARGET_AWS_SESSION_TOKEN }}" >> ~/.aws/credentials
-          # fi
-          
-          echo "" >> ~/.aws/config # Add a newline for better separation in the config file
-          echo "[profile default]" >> ~/.aws/config # Configuration for the 'default' (target) profile
-          echo "region = ${{ inputs.target_aws_region }}" >> ~/.aws/config
+          echo "" >> ~/.aws/config
+          echo "[profile default]" >> ~/.aws/config
+          echo "region = us-east-1" >> ~/.aws/config
           echo "output = json" >> ~/.aws/config
-          
-          echo "AWS credentials and config files created."
-          # For debugging (GitHub masks secrets in logs, but good to be cautious):
-          # echo "Contents of ~/.aws/credentials:"
-          # cat ~/.aws/credentials
-          # echo "Contents of ~/.aws/config:"
-          # cat ~/.aws/config
 
       - name: Run QuickSight Migration Python Script
         env:
-            PYTHONUNBUFFERED: "1" # Ensures Python script logs appear in real-time in Actions
+          PYTHONUNBUFFERED: "1"
         run: |
-          # Ensure your Python script is named correctly below (e.g., export_quicksight_dashboard.py)
           python export_quicksight_dashboard.py --export-and-import \
-            --source-account-id "${{ inputs.source_account_id }}" \
+            --source-account-id "${{ steps.set_account_ids.outputs.source_account_id }}" \
             --source-profile "source" \
             --dashboard-id "${{ inputs.dashboard_id }}" \
-            --source-aws-region "${{ inputs.source_aws_region }}" \
-            --output-file-base "${{ inputs.output_file_base }}" \
-            --target-account-id "${{ inputs.target_account_id }}" \
+            --source-aws-region "us-east-1" \
+            --output-file-base "./quicksight_migration_output" \
+            --target-account-id "${{ steps.set_account_ids.outputs.target_account_id }}" \
             --target-profile "default" \
-            --target-aws-region "${{ inputs.target_aws_region }}"
+            --target-aws-region "us-east-1"
