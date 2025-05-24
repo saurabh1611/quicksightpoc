@@ -87,4 +87,5 @@ jobs:
             --output-file-base "./quicksight_migration_output" \
             --target-account-id "${{ steps.set_account_ids.outputs.target_account_id }}" \
             --target-profile "default" \
-            --target-aws-region "us-east-1"
+            --target-aws-region "us-east-1" \
+            --promotion-environment "${{ inputs.promotion_environment }}"
