@@ -10,14 +10,45 @@ import tempfile
 import shutil
 import sys
 
-DASHBOARD_SPECIFIC_REPLACEMENTS = {}
+DEV_TO_QA_DASHBOARD_REPLACEMENTS = {
+    "3519323f-3db4-4585-a0c1-a1df2698e3e0": "221553ff-d80a-4861-8890-ae7e028016b7",
+    "bb9c4023-1f25-472b-bf31-7a8ded7c2c69": "8955b0d0-ee47-4915-aac4-c4f9dffa6821",
+    "7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87": "52825973-e237-4adb-8fe8-015c046066b4",
+}
+
+QA_TO_STAGE_DASHBOARD_REPLACEMENTS = {
+    "221553ff-d80a-4861-8890-ae7e028016b7": "aabbccdd-eebb-4455-6677-112233445566",
+    "8955b0d0-ee47-4915-aac4-c4f9dffa6821": "eeddccbb-aa11-2233-4455-6677889900aa",
+    "52825973-e237-4adb-8fe8-015c046066b4": "12345678-90ab-cdef-1234-567890abcdef",
+}
+
+STAGE_TO_PROD_DASHBOARD_REPLACEMENTS = {
+    "aabbccdd-eebb-4455-6677-112233445566": "fedcba98-7654-3210-fedc-ba9876543210",
+    "eeddccbb-aa11-2233-4455-6677889900aa": "09876543-2109-8765-4321-098765432109",
+    "12345678-90ab-cdef-1234-567890abcdef": "abcdef01-2345-6789-abcd-ef0123456789",
+}
+
+ACCOUNT_ID_MAPPINGS = {
+    "DEV to QA": {
+        "OLD_ACCOUNT_ID": "470822489487",
+        "NEW_ACCOUNT_ID": "470822489488",
+    },
+    "QA to STAGE": {
+        "OLD_ACCOUNT_ID": "470822489488",
+        "NEW_ACCOUNT_ID": "470822489489",
+    },
+    "STAGE to PROD": {
+        "OLD_ACCOUNT_ID": "470822489489",
+        "NEW_ACCOUNT_ID": "470822489490",
+    }
+}
 
 def process_qs_file(
     downloaded_qs_path: str,
     output_modified_qs_path: str,
     dashboard_replacements_map: dict,
-    old_account_id_to_replace_generic: str, # Re-introduced as parameter
-    new_account_id_for_replacement_generic: str # Re-introduced as parameter
+    p_old_account_id: str,
+    p_new_account_id: str
 ):
     print(f"\nProcessing downloaded QS file: {downloaded_qs_path}")
     temp_extract_dir = tempfile.mkdtemp()
@@ -43,13 +74,13 @@ def process_qs_file(
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             content_string = f.read()
-
+                        
                         original_content_string = content_string
-                        for old_id, new_id in dashboard_replacements_map.items():
-                            if old_id in content_string:
-                                content_string = content_string.replace(old_id, new_id)
-                                print(f"    Replaced in dashboard file: '{old_id}' with '{new_id}'")
-
+                        for dev_id, qa_id in dashboard_replacements_map.items():
+                            if dev_id in content_string:
+                                content_string = content_string.replace(dev_id, qa_id)
+                                print(f"    Replaced in dashboard file: '{dev_id}' with '{qa_id}'")
+                        
                         if content_string != original_content_string:
                             dashboard_string_replacements_done_count +=1
                             with open(file_path, 'w', encoding='utf-8') as f:
@@ -77,8 +108,8 @@ def process_qs_file(
 
         dataset_files_scanned = 0
         account_id_replaced_in_files_count = 0
-
-        if data_folder_path and old_account_id_to_replace_generic and new_account_id_for_replacement_generic:
+        
+        if data_folder_path:
             print(f"Scanning for JSON files in '{os.path.basename(data_folder_path)}' folder to perform generic Account ID modifications...")
             for filename in os.listdir(data_folder_path):
                 if filename.endswith(".json"):
@@ -87,27 +118,27 @@ def process_qs_file(
                     print(f"  Processing dataset/datasource file for Account ID: {filename}")
 
                     file_had_account_id_replaced = False
-
+                    
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             raw_content_string = f.read()
                         modified_content_string = raw_content_string
 
-                        if old_account_id_to_replace_generic in modified_content_string:
-                            temp_str = modified_content_string.replace(old_account_id_to_replace_generic, new_account_id_for_replacement_generic)
+                        if p_old_account_id in modified_content_string:
+                            temp_str = modified_content_string.replace(p_old_account_id, p_new_account_id)
                             if temp_str != modified_content_string:
                                 modified_content_string = temp_str
-                                print(f"    Replaced generic Account ID string '{old_account_id_to_replace_generic}' with '{new_account_id_for_replacement_generic}'.")
+                                print(f"    Replaced generic Account ID string '{p_old_account_id}' with '{p_new_account_id}'.")
                                 file_had_account_id_replaced = True
-
+                        
                         if file_had_account_id_replaced:
-                            with open(file_path, 'w', encoding='utf-8') as f:
-                                f.write(modified_content_string)
-                            account_id_replaced_in_files_count += 1
+                               with open(file_path, 'w', encoding='utf-8') as f:
+                                 f.write(modified_content_string)
+                               account_id_replaced_in_files_count += 1
 
                     except Exception as e:
                         print(f"  ERROR: An unexpected error occurred while processing {filename} for Account ID replacement: {e}")
-
+            
             print(f"\nSummary of '{os.path.basename(data_folder_path)}' folder modifications (Account ID):")
             if dataset_files_scanned > 0:
                 print(f"  Files scanned: {dataset_files_scanned}")
@@ -115,7 +146,7 @@ def process_qs_file(
             else:
                 print(f"  No JSON files found or processed in '{os.path.basename(data_folder_path)}'. This is expected if export was run with --no-include-all.")
         else:
-            print(f"\nWarning: Neither 'dataset' nor 'datasource' directory found or generic account IDs not provided for replacements. This is expected if export was run with --no-include-all.")
+            print(f"\nWarning: Neither 'dataset' nor 'datasource' directory found for generic Account ID replacements. This is expected if export was run with --no-include-all.")
 
         base_output_name = os.path.splitext(output_modified_qs_path)[0]
         print(f"\nZipping modified content from '{temp_extract_dir}' to '{output_modified_qs_path}'...")
@@ -126,7 +157,7 @@ def process_qs_file(
         if created_zip_file != final_qs_path:
             os.rename(created_zip_file, final_qs_path)
         else:
-            final_qs_path = created_zip_file
+             final_qs_path = created_zip_file
         print(f"Successfully created modified bundle file: {os.path.abspath(final_qs_path)}")
         return os.path.abspath(final_qs_path)
     except Exception as e:
@@ -143,39 +174,32 @@ def export_quicksight_dashboard_and_modify(
     dashboard_id: str,
     source_aws_region: str,
     include_all_dependencies: bool,
-    promotion_environment: str,
-    target_aws_account_id: str, # Added to get the target account ID for generic replacement
+    promotion_type: str,
     output_file_path_base: str = None
 ):
     print(f"Initiating QuickSight dashboard export for Dashboard ID: {dashboard_id} from account {source_aws_account_id} in {source_aws_region}")
-    print(f"Promotion Environment: {promotion_environment}")
     print(f"Include all dependencies: {include_all_dependencies}")
+    print(f"Promotion Type: {promotion_type}")
 
     dashboard_replacements = {}
-    if promotion_environment == "DEV to QA":
-        dashboard_replacements = {
-            "3519323f-3db4-4585-a0c1-a1df2698e3e0": "221553ff-d80a-4861-8890-ae7e028016b7",
-            "bb9c4023-1f25-472b-bf31-7a8ded7c2c69": "8955b0d0-ee47-4915-aac4-c4f9dffa6821",
-            "7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87": "52825973-e237-4adb-8fe8-015c046066b4",
-        }
-    elif promotion_environment == "QA to STAGE":
-        dashboard_replacements = {
-            "3519323f-3db4-485-a0c1-a1df2698e3e0": "221553ff-d80a-4861-8890-ae7e028016b7",
-            "bb9c4023-1f25-72b-bf31-7a8ded7c2c69": "8955b0d0-ee47-4915-aac4-c4f9dffa6821",
-            "7d86f2f9-5bdf402d-8d47-d7ab76bbaf87": "52825973-e237-4adb-8fe8-015c046066b4",
-        }
-    elif promotion_environment == "STAGE to PROD":
-        dashboard_replacements = {
-            "3519323f-3db4-485-a01-a1df2698e3e0": "221553ff-d80a-4861-8890-ae7e028016b7",
-            "bb9c4023-1f25-72b-b31-7a8ded7c2c69": "8955b0d0-ee47-4915-aac4-c4f9dffa6821",
-            "7d86f2f9-5bdf402d-8d47-d7ab76bbaf87": "52825973-e237-4adb-8fe8-015c046066b4",
-        }
-    else:
-        print(f"Warning: Unknown promotion environment '{promotion_environment}'. No specific dashboard replacements will be applied.")
+    old_acct_id = ""
+    new_acct_id = ""
 
-    # Dynamically set generic account ID replacements based on the source and target account IDs
-    OLD_ACCOUNT_ID_TO_REPLACE = source_aws_account_id
-    NEW_ACCOUNT_ID_FOR_REPLACEMENT = target_aws_account_id
+    if promotion_type == "DEV to QA":
+        dashboard_replacements = DEV_TO_QA_DASHBOARD_REPLACEMENTS
+        old_acct_id = ACCOUNT_ID_MAPPINGS["DEV to QA"]["OLD_ACCOUNT_ID"]
+        new_acct_id = ACCOUNT_ID_MAPPINGS["DEV to QA"]["NEW_ACCOUNT_ID"]
+    elif promotion_type == "QA to STAGE":
+        dashboard_replacements = QA_TO_STAGE_DASHBOARD_REPLACEMENTS
+        old_acct_id = ACCOUNT_ID_MAPPINGS["QA to STAGE"]["OLD_ACCOUNT_ID"]
+        new_acct_id = ACCOUNT_ID_MAPPINGS["QA to STAGE"]["NEW_ACCOUNT_ID"]
+    elif promotion_type == "STAGE to PROD":
+        dashboard_replacements = STAGE_TO_PROD_DASHBOARD_REPLACEMENTS
+        old_acct_id = ACCOUNT_ID_MAPPINGS["STAGE to PROD"]["OLD_ACCOUNT_ID"]
+        new_acct_id = ACCOUNT_ID_MAPPINGS["STAGE to PROD"]["NEW_ACCOUNT_ID"]
+    else:
+        print(f"Error: Unknown promotion type '{promotion_type}'. No replacements will be applied.")
+        return None
 
     try:
         session_params = {"region_name": source_aws_region}
@@ -266,8 +290,8 @@ def export_quicksight_dashboard_and_modify(
         downloaded_qs_path,
         modified_qs_path,
         dashboard_replacements,
-        OLD_ACCOUNT_ID_TO_REPLACE,
-        NEW_ACCOUNT_ID_FOR_REPLACEMENT
+        old_acct_id,
+        new_acct_id
     )
 
     if final_modified_qs_file:
@@ -292,6 +316,7 @@ def import_quicksight_bundle(
         print("Warning: If this bundle was exported with --no-include-all, ensure all dependencies "
               "(DataSources, DataSets, Themes) exist and are accessible in the target account.")
 
+
     try:
         session_params = {"region_name": target_aws_region}
         if target_profile:
@@ -313,8 +338,8 @@ def import_quicksight_bundle(
         file_size_mb = len(bundle_body) / (1024 * 1024)
         print(f"Bundle file size: {file_size_mb:.2f} MB")
         if file_size_mb > 40:
-            print("Warning: Bundle file size is large. AWS API might have limitations for direct upload."
-                  "If import fails, consider using S3 URI based import via AWS Console or an updated script.")
+             print("Warning: Bundle file size is large. AWS API might have limitations for direct upload."
+                   "If import fails, consider using S3 URI based import via AWS Console or an updated script.")
 
         import_source = {'Body': bundle_body}
     except Exception as e:
@@ -365,7 +390,7 @@ def import_quicksight_bundle(
                     for error_item in describe_job_response['Errors']:
                         error_message = f"  - Type: {error_item.get('Type')}, Message: {error_item.get('Message')}"
                         if 'ViolatedEntities' in error_item and error_item['ViolatedEntities']:
-                            error_message += f", Violated Entities: {error_item.get('ViolatedEntities')}"
+                             error_message += f", Violated Entities: {error_item.get('ViolatedEntities')}"
                         print(error_message)
                         if 'Errors' in error_item and isinstance(error_item['Errors'], list):
                             for sub_error in error_item['Errors']:
@@ -403,6 +428,12 @@ if __name__ == "__main__":
     export_group.add_argument("--source-aws-region", help="AWS region for the SOURCE QuickSight account (e.g., 'us-east-1').")
     export_group.add_argument("--output-file-base", help="Optional. Base path and name for output files (e.g., './exports/mydash'). Defaults to './<dashboard_id>' structure.")
     export_group.add_argument(
+        "--promotion-type",
+        choices=["DEV to QA", "QA to STAGE", "STAGE to PROD"],
+        help="Specify the promotion type to apply appropriate replacements (e.g., 'DEV to QA', 'QA to STAGE', 'STAGE to PROD').",
+        required=False
+    )
+    export_group.add_argument(
         "--no-include-all",
         action="store_false",
         dest="include_all_dependencies",
@@ -411,7 +442,6 @@ if __name__ == "__main__":
              "This may require dependencies to exist and be accessible in the target account.\n"
              "By default, all dependencies ARE included."
     )
-    export_group.add_argument("--promotion-environment", help="The selected promotion environment (e.g., 'DEV to QA').", required=False)
 
     import_group = parser.add_argument_group('Import Options (required if not --export-only)')
     import_group.add_argument("--target-account-id", help="Target AWS Account ID for import.")
@@ -424,13 +454,8 @@ if __name__ == "__main__":
     modified_qs_file_to_import = None
 
     if args.export_only or args.export_and_import:
-        if not all([args.source_account_id, args.dashboard_id, args.source_aws_region]):
-            parser.error("--source-account-id, --dashboard-id, and --source-aws-region are required for export actions.")
-
-        if (args.promotion_environment is None) and (args.export_and_import or args.export_only):
-             parser.error("--promotion-environment is required for export actions.")
-
-
+        if not all([args.source_account_id, args.dashboard_id, args.source_aws_region, args.promotion_type]):
+            parser.error("--source-account-id, --dashboard-id, --source-aws-region, AND --promotion-type are required for export actions.")
         print("--- Starting Export and Modification Process ---")
         modified_qs_file_to_import = export_quicksight_dashboard_and_modify(
             source_aws_account_id=args.source_account_id,
@@ -438,9 +463,8 @@ if __name__ == "__main__":
             dashboard_id=args.dashboard_id,
             source_aws_region=args.source_aws_region,
             include_all_dependencies=args.include_all_dependencies,
-            output_file_path_base=args.output_file_base,
-            promotion_environment=args.promotion_environment,
-            target_aws_account_id=args.target_account_id # Pass target account ID
+            promotion_type=args.promotion_type,
+            output_file_path_base=args.output_file_base
         )
         if not modified_qs_file_to_import:
             print("\nExport and modification process failed or did not produce a file. Aborting.")
@@ -479,5 +503,5 @@ if __name__ == "__main__":
         else:
             print("\n--- Import process failed or did not complete. Review logs for details. ---")
             sys.exit(1)
-
+    
     print("\nScript execution finished.")
