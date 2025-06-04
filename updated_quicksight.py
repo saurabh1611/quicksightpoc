@@ -50,10 +50,10 @@ def process_qs_file(
                             content_string = f.read()
                         
                         original_content_string = content_string
-                        for dev_id, qa_id in dashboard_replacements_map.items():
-                            if dev_id in content_string:
-                                content_string = content_string.replace(dev_id, qa_id)
-                                print(f"    Replaced in dashboard file: '{dev_id}' with '{qa_id}'")
+                        for old_id, new_id in dashboard_replacements_map.items():
+                            if old_id in content_string:
+                                content_string = content_string.replace(old_id, new_id)
+                                print(f"    Replaced in dashboard file: '{old_id}' with '{new_id}'")
                         
                         if content_string != original_content_string:
                             dashboard_string_replacements_done_count +=1
@@ -100,7 +100,7 @@ def process_qs_file(
                             raw_content_string = f.read()
                         modified_content_string = raw_content_string
 
-                        if p_old_account_id in modified_content_string:
+                        if p_old_account_id and p_new_account_id and p_old_account_id in modified_content_string:
                             temp_str = modified_content_string.replace(p_old_account_id, p_new_account_id)
                             if temp_str != modified_content_string:
                                 modified_content_string = temp_str
@@ -111,6 +111,8 @@ def process_qs_file(
                                with open(file_path, 'w', encoding='utf-8') as f:
                                    f.write(modified_content_string)
                                account_id_replaced_in_files_count += 1
+                        else:
+                            print(f"    No generic Account ID replacement needed or found in {filename}.")
 
                     except Exception as e:
                         print(f"  ERROR: An unexpected error occurred while processing {filename} for Account ID replacement: {e}")
@@ -159,6 +161,9 @@ def export_quicksight_dashboard_and_modify(
 ):
     print(f"Initiating QuickSight dashboard export for Dashboard ID: {dashboard_id} from account {source_aws_account_id} in {source_aws_region}")
     print(f"Include all dependencies: {include_all_dependencies}")
+    print(f"Dashboard specific replacements JSON: {dashboard_replacements_json}")
+    print(f"Generic Account ID replacement: OLD='{old_account_id}', NEW='{new_account_id}'")
+
 
     try:
         session_params = {"region_name": source_aws_region}
@@ -414,10 +419,24 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # Add a print statement here to debug the received JSON string
+    print(f"DEBUG (Python Script Start): dashboard_replacements_json argument received: {args.dashboard_replacements_json}")
+    print(f"DEBUG (Python Script Start): old_account_id_generic argument received: {args.old_account_id_generic}")
+    print(f"DEBUG (Python Script Start): new_account_id_generic argument received: {args.new_account_id_generic}")
+
+
     modified_qs_file_to_import = None
 
     # Default empty dictionary if not provided (though workflow will always provide it)
-    dashboard_replacements_map = json.loads(args.dashboard_replacements_json) if args.dashboard_replacements_json else {}
+    dashboard_replacements_map_for_export = {}
+    if args.dashboard_replacements_json:
+        try:
+            dashboard_replacements_map_for_export = json.loads(args.dashboard_replacements_json)
+        except json.JSONDecodeError as e:
+            print(f"Error parsing dashboard_replacements_json: {e}")
+            print(f"Received string was: '{args.dashboard_replacements_json}'")
+            sys.exit(1)
+
 
     if args.export_only or args.export_and_import:
         if not all([args.source_account_id, args.dashboard_id, args.source_aws_region]):
