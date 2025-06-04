@@ -46,7 +46,7 @@ jobs:
               echo "target_account_id=22222" >> "$GITHUB_OUTPUT"
               echo "old_account_id_generic=470822489487" >> "$GITHUB_OUTPUT" # Placeholder for generic DEV account ID
               echo "new_account_id_generic=470822489488" >> "$GITHUB_OUTPUT" # Placeholder for generic QA account ID
-              # Specific Dashboard ID replacements for DEV to QA
+              # Specific Dashboard ID replacements for DEV to QA - ENSURE ALL INNER DOUBLE QUOTES ARE ESCAPED
               echo "dashboard_replacements={\"3519323f-3db4-4585-a0c1-a1df2698e3e0\": \"221553ff-d80a-4861-8890-ae7e028016b7\", \"bb9c4023-1f25-472b-bf31-7a8ded7c2c69\": \"8955b0d0-ee47-4915-aac4-c4f9dffa6821\", \"7d86f2f9-5bdf-402d-8d47-d7ab76bbaf87\": \"52825973-e237-4adb-8fe8-015c046066b4\"}" >> "$GITHUB_OUTPUT"
               ;;
             "QA to STAGE")
@@ -54,8 +54,7 @@ jobs:
               echo "target_account_id=33333" >> "$GITHUB_OUTPUT"
               echo "old_account_id_generic=470822489488" >> "$GITHUB_OUTPUT" # Placeholder for generic QA account ID
               echo "new_account_id_generic=470822489489" >> "$GITHUB_OUTPUT" # Placeholder for generic STAGE account ID
-              # Specific Dashboard ID replacements for QA to STAGE
-              # YOU MUST UPDATE THESE PLACEHOLDER IDs WITH YOUR ACTUAL ONES
+              # Specific Dashboard ID replacements for QA to STAGE - YOU MUST UPDATE THESE PLACEHOLDER IDs
               echo "dashboard_replacements={\"qa-dashboard-id-1\": \"stage-dashboard-id-1\", \"qa-dashboard-id-2\": \"stage-dashboard-id-2\"}" >> "$GITHUB_OUTPUT"
               ;;
             "STAGE to PROD")
@@ -63,8 +62,7 @@ jobs:
               echo "target_account_id=44444" >> "$GITHUB_OUTPUT"
               echo "old_account_id_generic=470822489489" >> "$GITHUB_OUTPUT" # Placeholder for generic STAGE account ID
               echo "new_account_id_generic=470822489490" >> "$GITHUB_OUTPUT" # Placeholder for generic PROD account ID
-              # Specific Dashboard ID replacements for STAGE to PROD
-              # YOU MUST UPDATE THESE PLACEHOLDER IDs WITH YOUR ACTUAL ONES
+              # Specific Dashboard ID replacements for STAGE to PROD - YOU MUST UPDATE THESE PLACEHOLDER IDs
               echo "dashboard_replacements={\"stage-dashboard-id-a\": \"prod-dashboard-id-a\", \"stage-dashboard-id-b\": \"prod-dashboard-id-b\"}" >> "$GITHUB_OUTPUT"
               ;;
             *)
