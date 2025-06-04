@@ -20,6 +20,9 @@ jobs:
   migrate_quicksight_dashboard:
     runs-on: ubuntu-latest
 
+    permissions:
+      contents: read # Required to checkout the repository
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -52,6 +55,7 @@ jobs:
               echo "old_account_id_generic=470822489488" >> "$GITHUB_OUTPUT" # Placeholder for generic QA account ID
               echo "new_account_id_generic=470822489489" >> "$GITHUB_OUTPUT" # Placeholder for generic STAGE account ID
               # Specific Dashboard ID replacements for QA to STAGE
+              # YOU MUST UPDATE THESE PLACEHOLDER IDs WITH YOUR ACTUAL ONES
               echo "dashboard_replacements={\"qa-dashboard-id-1\": \"stage-dashboard-id-1\", \"qa-dashboard-id-2\": \"stage-dashboard-id-2\"}" >> "$GITHUB_OUTPUT"
               ;;
             "STAGE to PROD")
@@ -60,6 +64,7 @@ jobs:
               echo "old_account_id_generic=470822489489" >> "$GITHUB_OUTPUT" # Placeholder for generic STAGE account ID
               echo "new_account_id_generic=470822489490" >> "$GITHUB_OUTPUT" # Placeholder for generic PROD account ID
               # Specific Dashboard ID replacements for STAGE to PROD
+              # YOU MUST UPDATE THESE PLACEHOLDER IDs WITH YOUR ACTUAL ONES
               echo "dashboard_replacements={\"stage-dashboard-id-a\": \"prod-dashboard-id-a\", \"stage-dashboard-id-b\": \"prod-dashboard-id-b\"}" >> "$GITHUB_OUTPUT"
               ;;
             *)
