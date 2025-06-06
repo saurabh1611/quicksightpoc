@@ -42,8 +42,8 @@ jobs:
         run: |
           case "${{ inputs.promotion_environment }}" in
             "DEV to QA")
-              echo "source_account_id=11111" >> "$GITHUB_OUTPUT"
-              echo "target_account_id=22222" >> "$GITHUB_OUTPUT"
+              echo "source_account_id=470822489487" >> "$GITHUB_OUTPUT"
+              echo "target_account_id=470822489487" >> "$GITHUB_OUTPUT"
               echo "old_account_id_generic=470822489487" >> "$GITHUB_OUTPUT" # Placeholder for generic DEV account ID
               echo "new_account_id_generic=470822489488" >> "$GITHUB_OUTPUT" # Placeholder for generic QA account ID
               
