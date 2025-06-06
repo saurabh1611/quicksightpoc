@@ -9,6 +9,7 @@ import json
 import tempfile
 import shutil
 import sys
+import base64 # Import base64 module
 
 def process_qs_file(
     downloaded_qs_path: str,
@@ -154,14 +155,14 @@ def export_quicksight_dashboard_and_modify(
     source_aws_region: str,
     include_all_dependencies: bool,
     output_file_path_base: str = None,
-    # New parameters for dynamic replacements
-    dashboard_replacements_json: str = "{}", # JSON string for dashboard specific replacements
+    # This will now be Base64 encoded JSON
+    dashboard_replacements_json: str = "", 
     old_account_id: str = "",
     new_account_id: str = ""
 ):
     print(f"Initiating QuickSight dashboard export for Dashboard ID: {dashboard_id} from account {source_aws_account_id} in {source_aws_region}")
     print(f"Include all dependencies: {include_all_dependencies}")
-    print(f"Dashboard specific replacements JSON: {dashboard_replacements_json}")
+    print(f"Dashboard specific replacements JSON (Base64): {dashboard_replacements_json}")
     print(f"Generic Account ID replacement: OLD='{old_account_id}', NEW='{new_account_id}'")
 
 
@@ -250,8 +251,17 @@ def export_quicksight_dashboard_and_modify(
         print(f"Error downloading asset bundle: {e}")
         return None
 
-    # Parse the dashboard replacements JSON string
-    dashboard_replacements_map = json.loads(dashboard_replacements_json)
+    # Decode the Base64 string and parse it as JSON
+    dashboard_replacements_map = {}
+    if dashboard_replacements_json: # Check if string is not empty
+        try:
+            decoded_json_bytes = base64.b64decode(dashboard_replacements_json)
+            dashboard_replacements_map = json.loads(decoded_json_bytes.decode('utf-8'))
+        except (base64.binascii.Error, json.JSONDecodeError, UnicodeDecodeError) as e:
+            print(f"ERROR: Failed to decode or parse dashboard_replacements_json (Base64): {e}")
+            print(f"Received Base64 string was: '{dashboard_replacements_json}'")
+            return None # Stop execution if parsing fails
+
 
     final_modified_qs_file = process_qs_file(
         downloaded_qs_path,
@@ -404,9 +414,9 @@ if __name__ == "__main__":
              "This may require dependencies to exist and be accessible in the target account.\n"
              "By default, all dependencies ARE included."
     )
-    # New arguments for dynamic content modification
+    # New arguments for dynamic content modification (now expects Base64 encoded)
     export_group.add_argument("--promotion-type", help="The type of promotion (e.g., 'DEV to QA', 'QA to STAGE').")
-    export_group.add_argument("--dashboard-replacements-json", help="JSON string containing specific dashboard ID replacements.")
+    export_group.add_argument("--dashboard-replacements-json", help="Base64 encoded JSON string containing specific dashboard ID replacements.")
     export_group.add_argument("--old-account-id-generic", help="Generic old account ID for replacement in dataset/datasource files.")
     export_group.add_argument("--new-account-id-generic", help="Generic new account ID for replacement in dataset/datasource files.")
 
@@ -419,23 +429,25 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Add a print statement here to debug the received JSON string
+    # --- Debugging print statements ---
     print(f"DEBUG (Python Script Start): dashboard_replacements_json argument received: {args.dashboard_replacements_json}")
     print(f"DEBUG (Python Script Start): old_account_id_generic argument received: {args.old_account_id_generic}")
     print(f"DEBUG (Python Script Start): new_account_id_generic argument received: {args.new_account_id_generic}")
+    # --- End Debugging ---
 
 
     modified_qs_file_to_import = None
 
-    # Default empty dictionary if not provided (though workflow will always provide it)
+    # Decode the Base64 string and parse it as JSON in the main block as well
     dashboard_replacements_map_for_export = {}
     if args.dashboard_replacements_json:
         try:
-            dashboard_replacements_map_for_export = json.loads(args.dashboard_replacements_json)
-        except json.JSONDecodeError as e:
-            print(f"Error parsing dashboard_replacements_json: {e}")
-            print(f"Received string was: '{args.dashboard_replacements_json}'")
-            sys.exit(1)
+            decoded_json_bytes = base64.b64decode(args.dashboard_replacements_json)
+            dashboard_replacements_map_for_export = json.loads(decoded_json_bytes.decode('utf-8'))
+        except (base64.binascii.Error, json.JSONDecodeError, UnicodeDecodeError) as e:
+            print(f"ERROR: Failed to decode or parse dashboard_replacements_json (Base64) in main script: {e}")
+            print(f"Received Base64 string was: '{args.dashboard_replacements_json}'")
+            sys.exit(1) # Exit if cannot parse this crucial input
 
 
     if args.export_only or args.export_and_import:
@@ -449,7 +461,7 @@ if __name__ == "__main__":
             source_aws_region=args.source_aws_region,
             include_all_dependencies=args.include_all_dependencies,
             output_file_path_base=args.output_file_base,
-            # Pass dynamic values
+            # Pass the Base64 encoded string to the function
             dashboard_replacements_json=args.dashboard_replacements_json,
             old_account_id=args.old_account_id_generic,
             new_account_id=args.new_account_id_generic
