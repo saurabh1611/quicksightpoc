@@ -103,7 +103,7 @@ jobs:
         env:
           PYTHONUNBUFFERED: "1"
         run: |
-          python export_quicksight_dashboard.py --export-and-import \
+          python updated_quicksight.py --export-and-import \
             --source-account-id "${{ steps.set_migration_parameters.outputs.source_account_id }}" \
             --source-profile "source" \
             --dashboard-id "${{ inputs.dashboard_id }}" \
